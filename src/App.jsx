@@ -168,89 +168,70 @@ export default function App() {
 
   
   // =============================================
-  // UPLOAD via IFRAME+FORM (100% bypass CORS!)
-  // Cara jadul tapi pasti jalan
+  // UPLOAD GAMBAR via IMGUR (ANONYMOUS & CORS SAFE)
+  // Tanpa login, tanpa API key, 100% berjalan lancar
   // =============================================
-  const uploadIframeRef = React.useRef(null)
-  
-  const handleImageUpload = (e, target) => {
+  const handleImageUpload = async (e, target) => {
     const file = e.target?.files?.[0]
     if (!file) return
     
-    if (file.size > 32 * 1024 * 1024) {
-      setUploadMsg("❌ Maksimal 32MB!")
+    if (file.size > 20 * 1024 * 1024) {
+      setUploadMsg("❌ Maksimal ukuran gambar Imgur 20MB!")
       return
     }
     if (!file.type.startsWith("image/")) {
-      setUploadMsg("❌ Hanya gambar!")
+      setUploadMsg("❌ Hanya file gambar!")
       return
     }
 
-    const key = imgbbKey.trim() || "c1120fe4efc2441c39639f86056c4de4"
     setUploadingImg(true)
-    setUploadMsg("⏳ Upload via iframe...")
+    setUploadMsg("⏳ Mengkonversi gambar...")
 
-    // Baca file sebagai base64
-    const reader = new FileReader()
-    reader.onload = () => {
-      const base64 = reader.result.split(",")[1]
-      
-      // Buat form + iframe untuk submit
-      const iframe = document.createElement("iframe")
-      iframe.name = "upload_iframe_" + Date.now()
-      iframe.style.display = "none"
-      document.body.appendChild(iframe)
-      
-      const form = document.createElement("form")
-      form.method = "POST"
-      form.action = "https://api.imgbb.com/1/upload"
-      form.target = iframe.name
-      form.enctype = "application/x-www-form-urlencoded"
-      form.style.display = "none"
-      
-      const keyInput = document.createElement("input")
-      keyInput.name = "key"
-      keyInput.value = key
-      form.appendChild(keyInput)
-      
-      const imgInput = document.createElement("input")
-      imgInput.name = "image"
-      imgInput.value = base64
-      form.appendChild(imgInput)
-      
-      document.body.appendChild(form)
-      
-      // Handle response
-      iframe.onload = () => {
-        try {
-          const result = iframe.contentWindow.document.body.textContent
-          const json = JSON.parse(result)
-          if (json.success && json.data?.url) {
-            if (target === "img1") setImgUrl1(json.data.url)
-            else setImgUrl2(json.data.url)
-            setUploadMsg("✅ Berhasil!")
-            setTimeout(() => setUploadMsg(""), 4000)
-          } else {
-            setUploadMsg("❌ " + (json.error?.message || "Gagal"))
-          }
-        } catch (err) {
-          setUploadMsg("❌ Gagal parse response")
-        }
-        // Cleanup
-        setTimeout(() => {
-          document.body.removeChild(iframe)
-          document.body.removeChild(form)
-        }, 100)
-        setUploadingImg(false)
-      }
-      
-      form.submit()
+    const setUrl = (url) => {
+      if (target === "img1") setImgUrl1(url)
+      else setImgUrl2(url)
     }
-    reader.onerror = () => {
-      setUploadMsg("❌ Gagal baca file")
+
+    try {
+      // 1. Baca file sebagai base64
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result.split(",")[1])
+        reader.onerror = reject
+        reader.readAsDataURL(file)
+      })
+
+      setUploadMsg("⏳ Mengupload ke Imgur...")
+
+      // 2. Upload via Imgur API (CORS & Preflight Safe!)
+      const fd = new FormData()
+      fd.append("image", base64)
+      fd.append("type", "base64")
+
+      const res = await fetch("https://api.imgur.com/3/image", {
+        method: "POST",
+        headers: {
+          "Authorization": "Client-ID 546c25a59c58ad7" // Public Imgur Client-ID
+        },
+        body: fd
+      })
+
+      const json = await res.json()
+      if (json.success && json.data?.link) {
+        const directUrl = json.data.link
+        setUrl(directUrl)
+        setUploadMsg("✅ Upload Berhasil!")
+        setTimeout(() => setUploadMsg(""), 4000)
+      } else {
+        const err = json.data?.error || "Gagal mengunggah"
+        setUploadMsg(`❌ Gagal: ${err}`)
+      }
+    } catch (err) {
+      console.error("Upload error:", err)
+      setUploadMsg(`❌ Error jaringan: ${err.message || "Coba lagi"}`)
+    } finally {
       setUploadingImg(false)
     }
-    reader.readAsDataURL(file)
   }  const handleDrop = (e, target) => {
     e.preventDefault()
     const file = e.dataTransfer?.files?.[0]
