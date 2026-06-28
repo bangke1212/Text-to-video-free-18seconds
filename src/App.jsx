@@ -168,10 +168,12 @@ export default function App() {
 
   
   // =============================================
-  // UPLOAD GAMBAR via ImgBB (URL-Encoded Base64)
-  // Simple POST → NO CORS preflight → PASTI JALAN!
+  // UPLOAD via IFRAME+FORM (100% bypass CORS!)
+  // Cara jadul tapi pasti jalan
   // =============================================
-  const handleImageUpload = async (e, target) => {
+  const uploadIframeRef = React.useRef(null)
+  
+  const handleImageUpload = (e, target) => {
     const file = e.target?.files?.[0]
     if (!file) return
     
@@ -185,51 +187,70 @@ export default function App() {
     }
 
     const key = imgbbKey.trim() || "c1120fe4efc2441c39639f86056c4de4"
-
     setUploadingImg(true)
-    setUploadMsg("⏳ Mengkonversi & upload...")
+    setUploadMsg("⏳ Upload via iframe...")
 
-    const setUrl = (url) => {
-      if (target === "img1") setImgUrl1(url)
-      else setImgUrl2(url)
-    }
-
-    try {
-      // 1. Konversi file ke base64
-      const base64 = await new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(reader.result.split(",")[1])
-        reader.onerror = reject
-        reader.readAsDataURL(file)
-      })
-
-      // 2. Kirim via URL-encoded form (SIMPLE POST = NO CORS PREFLIGHT!)
-      setUploadMsg("⏳ Uploading...")
-      const body = "key=" + encodeURIComponent(key) + "&image=" + encodeURIComponent(base64)
+    // Baca file sebagai base64
+    const reader = new FileReader()
+    reader.onload = () => {
+      const base64 = reader.result.split(",")[1]
       
-      const res = await fetch("https://api.imgbb.com/1/upload", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: body
-      })
+      // Buat form + iframe untuk submit
+      const iframe = document.createElement("iframe")
+      iframe.name = "upload_iframe_" + Date.now()
+      iframe.style.display = "none"
+      document.body.appendChild(iframe)
       
-      const json = await res.json()
+      const form = document.createElement("form")
+      form.method = "POST"
+      form.action = "https://api.imgbb.com/1/upload"
+      form.target = iframe.name
+      form.enctype = "application/x-www-form-urlencoded"
+      form.style.display = "none"
       
-      if (json.success && json.data?.url) {
-        setUrl(json.data.url)
-        setUploadMsg("✅ Berhasil!")
-        setTimeout(() => setUploadMsg(""), 4000)
-      } else {
-        const err = json.error?.message || "Unknown"
-        console.error("ImgBB:", json)
-        setUploadMsg("❌ " + err)
+      const keyInput = document.createElement("input")
+      keyInput.name = "key"
+      keyInput.value = key
+      form.appendChild(keyInput)
+      
+      const imgInput = document.createElement("input")
+      imgInput.name = "image"
+      imgInput.value = base64
+      form.appendChild(imgInput)
+      
+      document.body.appendChild(form)
+      
+      // Handle response
+      iframe.onload = () => {
+        try {
+          const result = iframe.contentWindow.document.body.textContent
+          const json = JSON.parse(result)
+          if (json.success && json.data?.url) {
+            if (target === "img1") setImgUrl1(json.data.url)
+            else setImgUrl2(json.data.url)
+            setUploadMsg("✅ Berhasil!")
+            setTimeout(() => setUploadMsg(""), 4000)
+          } else {
+            setUploadMsg("❌ " + (json.error?.message || "Gagal"))
+          }
+        } catch (err) {
+          setUploadMsg("❌ Gagal parse response")
+        }
+        // Cleanup
+        setTimeout(() => {
+          document.body.removeChild(iframe)
+          document.body.removeChild(form)
+        }, 100)
+        setUploadingImg(false)
       }
-    } catch (err) {
-      console.error("Upload error:", err)
-      setUploadMsg("❌ " + (err.message || "Error").substring(0, 60))
-    } finally {
+      
+      form.submit()
+    }
+    reader.onerror = () => {
+      setUploadMsg("❌ Gagal baca file")
       setUploadingImg(false)
     }
+    reader.readAsDataURL(file)
   }  const handleDrop = (e, target) => {
     e.preventDefault()
     const file = e.dataTransfer?.files?.[0]
