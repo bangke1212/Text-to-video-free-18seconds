@@ -1,12 +1,6 @@
 {
   "rewrites": [
-    {
-      "source": "/api/imgur-proxy",
-      "destination": "https://api.imgur.com/3/image",
-      "headers": {
-        "Authorization": "Client-ID 546c25a59c58ad7"
-      }
-    },
+    { "source": "/api/imgur-proxy", "destination": "https://api.imgur.com/3/image" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
