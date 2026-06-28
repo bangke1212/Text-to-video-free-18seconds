@@ -213,11 +213,17 @@ export default function App() {
         setUploadMsg(`✅ Berhasil! URL siap pakai`)
         setTimeout(() => setUploadMsg(""), 4000)
       } else {
-        setUploadMsg(`❌ Gagal: ${json.error || "Unknown error"}`)
+        const errDetail = json.error?.message || json.error || JSON.stringify(json).substring(0, 100)
+        console.error("ImgBB error:", json)
+        setUploadMsg(`❌ Gagal: ${errDetail}`)
       }
     } catch (err) {
       console.error("Upload error:", err)
-      setUploadMsg("❌ Gagal upload. Coba paste URL manual.")
+      // Tampilkan pesan error yang informatif
+      let msg = "❌ Gagal upload."
+      if (err.message) msg += ` (${err.message})`
+      else if (typeof err === "object") msg += " Cek console (F12)."
+      setUploadMsg(msg)
     } finally {
       setUploadingImg(false)
     }
