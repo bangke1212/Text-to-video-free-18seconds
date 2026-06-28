@@ -72,7 +72,7 @@ export default function App() {
   const [imgUrl2, setImgUrl2] = useState("")
   const [uploadingImg, setUploadingImg] = useState(false)
   const [uploadMsg, setUploadMsg] = useState("")
-  const [imgbbKey, setImgbbKey] = useState(() => localStorage.getItem("imgbb_key") || "")
+  const [imgbbKey, setImgbbKey] = useState(() => localStorage.getItem("imgbb_key") || "c1120fe4efc2441c39639f86056c4de4")
   
   // Progress & Statuses
   const [status, setStatus] = useState("idle") 
@@ -214,7 +214,12 @@ export default function App() {
         setTimeout(() => setUploadMsg(""), 4000)
       } else {
         const err = json.error?.message || "Unknown"
-        setUploadMsg("❌ " + err)
+        console.error("ImgBB error:", json)
+        if (err.includes("forbidden") || err.includes("Forbidden")) {
+          setUploadMsg("❌ Key ImgBB tidak valid. Dapatkan baru di api.imgbb.com")
+        } else {
+          setUploadMsg("❌ " + err)
+        }
       }
     } catch (err) {
       setUploadMsg("❌ " + (err.message || "Error").substring(0, 50))
