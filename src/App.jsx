@@ -168,8 +168,8 @@ export default function App() {
 
   
   // =============================================
-  // UPLOAD GAMBAR via ImgBB API (SUPPORT CORS!)
-  // Daftar gratis 1 menit di https://api.imgbb.com/
+  // UPLOAD GAMBAR via ImgBB (URL-Encoded Base64)
+  // Simple POST → NO CORS preflight → PASTI JALAN!
   // =============================================
   const handleImageUpload = async (e, target) => {
     const file = e.target?.files?.[0]
@@ -184,14 +184,10 @@ export default function App() {
       return
     }
 
-    const key = imgbbKey.trim()
-    if (!key) {
-      setUploadMsg("⚠️ Isi ImgBB API Key dulu di header!")
-      return
-    }
+    const key = imgbbKey.trim() || "c1120fe4efc2441c39639f86056c4de4"
 
     setUploadingImg(true)
-    setUploadMsg("⏳ Upload ke ImgBB...")
+    setUploadMsg("⏳ Mengkonversi & upload...")
 
     const setUrl = (url) => {
       if (target === "img1") setImgUrl1(url)
@@ -199,30 +195,38 @@ export default function App() {
     }
 
     try {
-      const fd = new FormData()
-      fd.append("image", file)
+      // 1. Konversi file ke base64
+      const base64 = await new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => resolve(reader.result.split(",")[1])
+        reader.onerror = reject
+        reader.readAsDataURL(file)
+      })
+
+      // 2. Kirim via URL-encoded form (SIMPLE POST = NO CORS PREFLIGHT!)
+      setUploadMsg("⏳ Uploading...")
+      const body = "key=" + encodeURIComponent(key) + "&image=" + encodeURIComponent(base64)
       
-      const res = await fetch(`https://api.imgbb.com/1/upload?key=${key}`, {
+      const res = await fetch("https://api.imgbb.com/1/upload", {
         method: "POST",
-        body: fd
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: body
       })
       
       const json = await res.json()
+      
       if (json.success && json.data?.url) {
         setUrl(json.data.url)
         setUploadMsg("✅ Berhasil!")
         setTimeout(() => setUploadMsg(""), 4000)
       } else {
         const err = json.error?.message || "Unknown"
-        console.error("ImgBB error:", json)
-        if (err.includes("forbidden") || err.includes("Forbidden")) {
-          setUploadMsg("❌ Key ImgBB tidak valid. Dapatkan baru di api.imgbb.com")
-        } else {
-          setUploadMsg("❌ " + err)
-        }
+        console.error("ImgBB:", json)
+        setUploadMsg("❌ " + err)
       }
     } catch (err) {
-      setUploadMsg("❌ " + (err.message || "Error").substring(0, 50))
+      console.error("Upload error:", err)
+      setUploadMsg("❌ " + (err.message || "Error").substring(0, 60))
     } finally {
       setUploadingImg(false)
     }
