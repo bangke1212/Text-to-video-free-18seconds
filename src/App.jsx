@@ -169,7 +169,7 @@ export default function App() {
   
   
   // =============================================
-  // MULTI-PROVIDER UPLOAD: Catbox.moe → ImgBB → Imgur
+  // MULTI-PROVIDER UPLOAD: ImgBB → Catbox.moe → Imgur
   // Catbox.moe: gratis, no API key, no CORS, max 200MB
   // ImgBB: fallback, perlu API key (gratis)
   // Imgur: fallback terakhir via Vercel proxy
@@ -258,19 +258,19 @@ export default function App() {
 
       let uploadedUrl = null
 
-      // Strategy 1: Catbox.moe (paling reliable, no auth, no CORS)
+      // Strategy 1: ImgBB (paling reliable, ada API key)
       try {
-        uploadedUrl = await uploadToCatbox(catboxForm)
-      } catch (catboxErr) {
-        console.warn("Catbox gagal:", catboxErr.message)
+        uploadedUrl = await uploadToImgbb(base64)
+      } catch (imgbbErr) {
+        console.warn("ImgBB gagal:", imgbbErr.message)
       }
 
-      // Strategy 2: ImgBB fallback
+      // Strategy 2: Catbox.moe fallback
       if (!uploadedUrl) {
         try {
-          uploadedUrl = await uploadToImgbb(base64)
-        } catch (imgbbErr) {
-          console.warn("ImgBB gagal:", imgbbErr.message)
+          uploadedUrl = await uploadToCatbox(catboxForm)
+        } catch (catboxErr) {
+          console.warn("Catbox gagal:", catboxErr.message)
         }
       }
 
@@ -492,7 +492,7 @@ const handleGenerate = async () => {
               }}
             />
           </div>
-          <a href="https://api.imgbb.com/" target="_blank" rel="noopener" style={{ fontSize: "0.65rem", color: "#22c55e", textDecoration: "none" }}>📦 Upload: Catbox.moe (utama) → ImgBB → Imgur</a>
+          <a href="https://api.imgbb.com/" target="_blank" rel="noopener" style={{ fontSize: "0.65rem", color: "#22c55e", textDecoration: "none" }}>📦 Upload: ImgBB (utama) → Catbox.moe → Imgur</a>
         </div>
           <a 
             href="https://platform.agnes-ai.com/settings/apiKeys" 
@@ -620,7 +620,7 @@ const handleGenerate = async () => {
                     {uploadingImg ? (
                       <><RefreshCw size={18} className="spin" style={{ animation: "spin 1s linear infinite" }} color="#8b5cf6" /><span style={{ color: "#a1a1aa", fontSize: "0.85rem" }}>Uploading...</span></>
                     ) : (
-                      <><Upload size={18} color="#8b5cf6" /><span style={{ color: "#a1a1aa", fontSize: "0.85rem", fontWeight: 600 }}>Klik atau Drag & Drop Foto di Sini</span><span style={{ color: "#22c55e", fontSize: "0.7rem", fontWeight: 600 }}>— Auto-upload via Catbox.moe (gratis!)</span></>
+                      <><Upload size={18} color="#8b5cf6" /><span style={{ color: "#a1a1aa", fontSize: "0.85rem", fontWeight: 600 }}>Klik atau Drag & Drop Foto di Sini</span><span style={{ color: "#22c55e", fontSize: "0.7rem", fontWeight: 600 }}>— Auto-upload via ImgBB + Catbox (gratis!)</span></>
                     )}
                   </label>
                   
