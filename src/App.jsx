@@ -202,12 +202,10 @@ export default function App() {
 
       setUploadMsg("⏳ Upload...")
       
-      const res = await fetch("https://api.imgur.com/3/image", {
+      // Vercel rewrite proxy → SAME ORIGIN = NO CORS!
+      const res = await fetch("/api/imgur-proxy", {
         method: "POST",
-        headers: {
-          "Authorization": "Client-ID 546c25a59c58ad7",
-          "Content-Type": "application/json"
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ image: base64, type: "base64" })
       })
 
