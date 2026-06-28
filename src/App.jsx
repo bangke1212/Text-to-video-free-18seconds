@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react"
 import { 
-  Play, Sparkles, Sliders, Image as ImageIcon, Video, HelpCircle, AlertCircle, 
+  Play, Sparkles, Sliders, Image as ImageIcon, Video, HelpCircle, AlertCircle, Upload, ImagePlus, 
   Settings, Key, CheckCircle, RefreshCw, Layers, Download, ExternalLink, Moon,
   Clock, Maximize2, Monitor, Trash2, Flame, Film, User, Eye, ArrowRight, Sparkle,
   History, HelpCircle as HelpIcon, Heart, Info, Copy, Check
@@ -70,6 +70,8 @@ export default function App() {
   // Image URL inputs
   const [imgUrl1, setImgUrl1] = useState("")
   const [imgUrl2, setImgUrl2] = useState("")
+  const [uploadingImg, setUploadingImg] = useState(false)
+  const [uploadMsg, setUploadMsg] = useState("")
   
   // Progress & Statuses
   const [status, setStatus] = useState("idle") 
@@ -437,11 +439,49 @@ export default function App() {
               {mode === "img2vid" && (
                 <div style={{ marginBottom: "1.75rem", background: "#09090b", border: "1px solid #232329", padding: "1.25rem", borderRadius: "0.75rem" }}>
                   <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.8rem", fontWeight: 700, color: "#a1a1aa", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.6rem" }}>
-                    <ImageIcon size={14} color="#f43f5e" /> URL Gambar Referensi (Gambar Awal)
+                    <ImageIcon size={14} color="#f43f5e" /> Gambar Referensi
                   </label>
+                  
+                  {/* UPLOAD ZONE */}
+                  <label 
+                    onDrop={(e) => handleDrop(e, "img1")}
+                    onDragOver={(e) => e.preventDefault()}
+                    style={{
+                      display: "flex", alignItems: "center", justifyContent: "center", gap: "0.5rem",
+                      width: "100%", padding: "1.5rem", background: "rgba(139, 92, 246, 0.05)", 
+                      border: "2px dashed rgba(139, 92, 246, 0.3)", borderRadius: "0.75rem",
+                      cursor: "pointer", transition: "0.2s", marginBottom: "0.75rem"
+                    }}
+                    onMouseEnter={(e) => { e.target.style.background = "rgba(139, 92, 246, 0.1)"; e.target.style.borderColor = "rgba(139, 92, 246, 0.6)" }}
+                    onMouseLeave={(e) => { e.target.style.background = "rgba(139, 92, 246, 0.05)"; e.target.style.borderColor = "rgba(139, 92, 246, 0.3)" }}
+                  >
+                    <input 
+                      type="file" accept="image/*" hidden
+                      onChange={(e) => handleImageUpload(e, "img1")}
+                      disabled={uploadingImg}
+                    />
+                    {uploadingImg ? (
+                      <><RefreshCw size={18} className="spin" style={{ animation: "spin 1s linear infinite" }} color="#8b5cf6" /><span style={{ color: "#a1a1aa", fontSize: "0.85rem" }}>Uploading...</span></>
+                    ) : (
+                      <><Upload size={18} color="#8b5cf6" /><span style={{ color: "#a1a1aa", fontSize: "0.85rem", fontWeight: 600 }}>Klik atau Drag & Drop Foto di Sini</span><span style={{ color: "#52525b", fontSize: "0.7rem" }}>— JPG, PNG, max 32MB</span></>
+                    )}
+                  </label>
+                  
+                  {uploadMsg && (
+                    <div style={{ marginBottom: "0.75rem", padding: "0.5rem 0.75rem", background: uploadMsg.startsWith("✅") ? "rgba(34,197,94,0.1)" : "rgba(244,63,94,0.1)", borderRadius: "0.4rem", fontSize: "0.75rem", color: uploadMsg.startsWith("✅") ? "#22c55e" : "#f43f5e", fontWeight: 600 }}>
+                      {uploadMsg}
+                    </div>
+                  )}
+
+                  <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.75rem" }}>
+                    <div style={{ flex: 1, height: "1px", background: "#232329" }}></div>
+                    <span style={{ color: "#52525b", fontSize: "0.7rem", fontWeight: 600 }}>ATAU PASTE URL</span>
+                    <div style={{ flex: 1, height: "1px", background: "#232329" }}></div>
+                  </div>
+
                   <input 
                     type="url"
-                    placeholder="Masukkan url gambar publik (e.g. https://domain.com/photo.jpg)"
+                    placeholder="Atau paste URL gambar publik (e.g. https://domain.com/photo.jpg)"
                     value={imgUrl1}
                     onChange={(e) => setImgUrl1(e.target.value)}
                     style={{
@@ -452,7 +492,7 @@ export default function App() {
                   {imgUrl1 && (
                     <div style={{ marginTop: "1rem", position: "relative", border: "1px solid #232329", borderRadius: "0.5rem", overflow: "hidden" }}>
                       <img src={imgUrl1} alt="Preview" style={{ width: "100%", maxHeight: "150px", objectFit: "cover" }} />
-                      <div style={{ position: "absolute", top: "0.5rem", left: "0.5rem", background: "rgba(0,0,0,0.7)", padding: "0.25rem 0.5rem", borderRadius: "0.25rem", fontSize: "0.65rem", fontWeight: 600 }}>Gambar Aktif</div>
+                      <div style={{ position: "absolute", top: "0.5rem", left: "0.5rem", background: "rgba(139, 92, 246, 0.9)", padding: "0.25rem 0.5rem", borderRadius: "0.25rem", fontSize: "0.65rem", fontWeight: 600, color: "#fff" }}>Gambar Aktif</div>
                     </div>
                   )}
                 </div>
@@ -464,9 +504,26 @@ export default function App() {
                     <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.8rem", fontWeight: 700, color: "#a1a1aa", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.6rem" }}>
                       🎬 Keyframe Awal (Start)
                     </label>
+                    {/* UPLOAD KEYFRAME START */}
+                    <label 
+                      onDrop={(e) => handleDrop(e, "img1")}
+                      onDragOver={(e) => e.preventDefault()}
+                      style={{
+                        display: "flex", alignItems: "center", justifyContent: "center", gap: "0.35rem",
+                        width: "100%", padding: "0.6rem", background: "rgba(139, 92, 246, 0.05)", 
+                        border: "2px dashed rgba(139, 92, 246, 0.25)", borderRadius: "0.4rem",
+                        cursor: "pointer", marginBottom: "0.5rem", transition: "0.15s"
+                      }}
+                      onMouseEnter={(e) => { e.target.style.background = "rgba(139, 92, 246, 0.1)"; e.target.style.borderColor = "rgba(139, 92, 246, 0.6)" }}
+                      onMouseLeave={(e) => { e.target.style.background = "rgba(139, 92, 246, 0.05)"; e.target.style.borderColor = "rgba(139, 92, 246, 0.25)" }}
+                    >
+                      <input type="file" accept="image/*" hidden onChange={(e) => handleImageUpload(e, "img1")} disabled={uploadingImg} />
+                      <ImagePlus size={14} color="#8b5cf6" />
+                      <span style={{ color: "#a1a1aa", fontSize: "0.7rem", fontWeight: 600 }}>Upload Foto</span>
+                    </label>
                     <input 
                       type="url"
-                      placeholder="URL Gambar Start..."
+                      placeholder="Atau URL Gambar Start..."
                       value={imgUrl1}
                       onChange={(e) => setImgUrl1(e.target.value)}
                       style={{
@@ -482,9 +539,26 @@ export default function App() {
                     <label style={{ display: "flex", alignItems: "center", gap: "0.4rem", fontSize: "0.8rem", fontWeight: 700, color: "#a1a1aa", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.6rem" }}>
                       🏁 Keyframe Akhir (End)
                     </label>
+                    {/* UPLOAD KEYFRAME END */}
+                    <label 
+                      onDrop={(e) => handleDrop(e, "img2")}
+                      onDragOver={(e) => e.preventDefault()}
+                      style={{
+                        display: "flex", alignItems: "center", justifyContent: "center", gap: "0.35rem",
+                        width: "100%", padding: "0.6rem", background: "rgba(139, 92, 246, 0.05)", 
+                        border: "2px dashed rgba(139, 92, 246, 0.25)", borderRadius: "0.4rem",
+                        cursor: "pointer", marginBottom: "0.5rem", transition: "0.15s"
+                      }}
+                      onMouseEnter={(e) => { e.target.style.background = "rgba(139, 92, 246, 0.1)"; e.target.style.borderColor = "rgba(139, 92, 246, 0.6)" }}
+                      onMouseLeave={(e) => { e.target.style.background = "rgba(139, 92, 246, 0.05)"; e.target.style.borderColor = "rgba(139, 92, 246, 0.25)" }}
+                    >
+                      <input type="file" accept="image/*" hidden onChange={(e) => handleImageUpload(e, "img2")} disabled={uploadingImg} />
+                      <ImagePlus size={14} color="#8b5cf6" />
+                      <span style={{ color: "#a1a1aa", fontSize: "0.7rem", fontWeight: 600 }}>Upload Foto</span>
+                    </label>
                     <input 
                       type="url"
-                      placeholder="URL Gambar End..."
+                      placeholder="Atau URL Gambar End..."
                       value={imgUrl2}
                       onChange={(e) => setImgUrl2(e.target.value)}
                       style={{
@@ -958,3 +1032,4 @@ export default function App() {
     </div>
   )
 }
+
