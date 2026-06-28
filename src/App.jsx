@@ -167,9 +167,12 @@ export default function App() {
   }
 
   
+  
   // =============================================
-  // UPLOAD via IMGUR — JSON BODY (SIMPLE REQUEST!)
-  // application/json = simple content-type = NO preflight!
+  // MULTI-PROVIDER UPLOAD: Catbox.moe → ImgBB → Imgur
+  // Catbox.moe: gratis, no API key, no CORS, max 200MB
+  // ImgBB: fallback, perlu API key (gratis)
+  // Imgur: fallback terakhir via Vercel proxy
   // =============================================
   const handleImageUpload = async (e, target) => {
     const file = e.target?.files?.[0]
@@ -192,7 +195,60 @@ export default function App() {
       else setImgUrl2(url)
     }
 
+    // Helper: upload ke Catbox.moe (FormData, no auth, max 200MB)
+    const uploadToCatbox = async (formData) => {
+      setUploadMsg("⏳ Upload ke Catbox.moe...")
+      const res = await fetch("https://catbox.moe/user/api.php", {
+        method: "POST",
+        body: formData
+      })
+      const text = await res.text()
+      if (!res.ok || !text.startsWith("http")) {
+        throw new Error("Catbox: " + (text || "gagal").substring(0, 40))
+      }
+      return text.trim()
+    }
+
+    // Helper: upload ke ImgBB (FormData, perlu API key)
+    const uploadToImgbb = async (base64data) => {
+      setUploadMsg("⏳ Upload ke ImgBB...")
+      const key = imgbbKey.trim() || "c1120fe4efc2441c39639f86056c4de4"
+      const fd = new FormData()
+      fd.append("image", base64data)
+      fd.append("key", key)
+      const res = await fetch("https://api.imgbb.com/1/upload", {
+        method: "POST",
+        body: fd
+      })
+      const json = await res.json()
+      if (!json.success || !json.data?.url) {
+        throw new Error("ImgBB: " + ((json.error?.message) || "gagal").substring(0, 40))
+      }
+      return json.data.url
+    }
+
+    // Helper: upload via Imgur Vercel proxy
+    const uploadToImgur = async (base64data) => {
+      setUploadMsg("⏳ Upload via Imgur...")
+      const res = await fetch("/api/imgur-proxy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: base64data, type: "base64" })
+      })
+      const json = await res.json()
+      if (!json.success || !json.data?.link) {
+        throw new Error("Imgur: " + (json.data?.error || "gagal").substring(0, 40))
+      }
+      return json.data.link
+    }
+
     try {
+      // Siapkan FormData untuk Catbox (pakai file asli, bukan base64)
+      const catboxForm = new FormData()
+      catboxForm.append("reqtype", "fileupload")
+      catboxForm.append("fileToUpload", file)
+
+      // Siapkan base64 untuk ImgBB & Imgur fallback
       const base64 = await new Promise((resolve, reject) => {
         const reader = new FileReader()
         reader.onload = () => resolve(reader.result.split(",")[1])
@@ -200,29 +256,48 @@ export default function App() {
         reader.readAsDataURL(file)
       })
 
-      setUploadMsg("⏳ Upload...")
-      
-      // Vercel rewrite proxy → SAME ORIGIN = NO CORS!
-      const res = await fetch("/api/imgur-proxy", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: base64, type: "base64" })
-      })
+      let uploadedUrl = null
 
-      const json = await res.json()
-      if (json.success && json.data?.link) {
-        setUrl(json.data.link)
+      // Strategy 1: Catbox.moe (paling reliable, no auth, no CORS)
+      try {
+        uploadedUrl = await uploadToCatbox(catboxForm)
+      } catch (catboxErr) {
+        console.warn("Catbox gagal:", catboxErr.message)
+      }
+
+      // Strategy 2: ImgBB fallback
+      if (!uploadedUrl) {
+        try {
+          uploadedUrl = await uploadToImgbb(base64)
+        } catch (imgbbErr) {
+          console.warn("ImgBB gagal:", imgbbErr.message)
+        }
+      }
+
+      // Strategy 3: Imgur via Vercel proxy (last resort)
+      if (!uploadedUrl) {
+        try {
+          uploadedUrl = await uploadToImgur(base64)
+        } catch (imgurErr) {
+          console.warn("Imgur gagal:", imgurErr.message)
+        }
+      }
+
+      if (uploadedUrl) {
+        setUrl(uploadedUrl)
         setUploadMsg("✅ Berhasil!")
         setTimeout(() => setUploadMsg(""), 4000)
       } else {
-        setUploadMsg("❌ " + (json.data?.error || "Gagal"))
+        setUploadMsg("❌ Semua provider gagal. Coba lagi nanti.")
       }
     } catch (err) {
-      setUploadMsg("❌ " + (err.message || "").substring(0, 50))
+      setUploadMsg("❌ " + (err.message || "Error").substring(0, 50))
     } finally {
       setUploadingImg(false)
     }
-  }  const handleDrop = (e, target) => {
+  }
+
+  const handleDrop = (e, target) => {
     e.preventDefault()
     const file = e.dataTransfer?.files?.[0]
     if (file) {
@@ -408,7 +483,7 @@ const handleGenerate = async () => {
             <Key size={14} color="#22c55e" style={{ position: "absolute", left: "0.75rem", top: "50%", transform: "translateY(-50%)", zIndex: 12 }} />
             <input 
               type="password"
-              placeholder="ImgBB API Key..."
+              placeholder="ImgBB Key (fallback)..."
               value={imgbbKey}
               onChange={(e) => setImgbbKey(e.target.value)}
               style={{
@@ -417,7 +492,7 @@ const handleGenerate = async () => {
               }}
             />
           </div>
-          <a href="https://api.imgbb.com/" target="_blank" rel="noopener" style={{ fontSize: "0.65rem", color: "#22c55e", textDecoration: "none" }}>🔑 Dapatkan ImgBB Key Gratis →</a>
+          <a href="https://api.imgbb.com/" target="_blank" rel="noopener" style={{ fontSize: "0.65rem", color: "#22c55e", textDecoration: "none" }}>📦 Upload: Catbox.moe (utama) → ImgBB → Imgur</a>
         </div>
           <a 
             href="https://platform.agnes-ai.com/settings/apiKeys" 
@@ -545,7 +620,7 @@ const handleGenerate = async () => {
                     {uploadingImg ? (
                       <><RefreshCw size={18} className="spin" style={{ animation: "spin 1s linear infinite" }} color="#8b5cf6" /><span style={{ color: "#a1a1aa", fontSize: "0.85rem" }}>Uploading...</span></>
                     ) : (
-                      <><Upload size={18} color="#8b5cf6" /><span style={{ color: "#a1a1aa", fontSize: "0.85rem", fontWeight: 600 }}>Klik atau Drag & Drop Foto di Sini</span><span style={{ color: "#22c55e", fontSize: "0.7rem", fontWeight: 600 }}>— Auto-upload via Imgur (no login!)</span></>
+                      <><Upload size={18} color="#8b5cf6" /><span style={{ color: "#a1a1aa", fontSize: "0.85rem", fontWeight: 600 }}>Klik atau Drag & Drop Foto di Sini</span><span style={{ color: "#22c55e", fontSize: "0.7rem", fontWeight: 600 }}>— Auto-upload via Catbox.moe (gratis!)</span></>
                     )}
                   </label>
                   
