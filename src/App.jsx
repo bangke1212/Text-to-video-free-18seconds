@@ -168,24 +168,24 @@ export default function App() {
 
   
   // =============================================
-  // UPLOAD GAMBAR via IMGUR (ANONYMOUS & CORS SAFE)
-  // Tanpa login, tanpa API key, 100% berjalan lancar
+  // UPLOAD via IMGUR — JSON BODY (SIMPLE REQUEST!)
+  // application/json = simple content-type = NO preflight!
   // =============================================
   const handleImageUpload = async (e, target) => {
     const file = e.target?.files?.[0]
     if (!file) return
     
     if (file.size > 20 * 1024 * 1024) {
-      setUploadMsg("❌ Maksimal ukuran gambar Imgur 20MB!")
+      setUploadMsg("❌ Maks 20MB!")
       return
     }
     if (!file.type.startsWith("image/")) {
-      setUploadMsg("❌ Hanya file gambar!")
+      setUploadMsg("❌ Hanya gambar!")
       return
     }
 
     setUploadingImg(true)
-    setUploadMsg("⏳ Mengkonversi gambar...")
+    setUploadMsg("⏳ Membaca...")
 
     const setUrl = (url) => {
       if (target === "img1") setImgUrl1(url)
@@ -193,7 +193,6 @@ export default function App() {
     }
 
     try {
-      // 1. Baca file sebagai base64
       const base64 = await new Promise((resolve, reject) => {
         const reader = new FileReader()
         reader.onload = () => resolve(reader.result.split(",")[1])
@@ -201,34 +200,27 @@ export default function App() {
         reader.readAsDataURL(file)
       })
 
-      setUploadMsg("⏳ Mengupload ke Imgur...")
-
-      // 2. Upload via Imgur API (CORS & Preflight Safe!)
-      const fd = new FormData()
-      fd.append("image", base64)
-      fd.append("type", "base64")
-
+      setUploadMsg("⏳ Upload...")
+      
       const res = await fetch("https://api.imgur.com/3/image", {
         method: "POST",
         headers: {
-          "Authorization": "Client-ID 546c25a59c58ad7" // Public Imgur Client-ID
+          "Authorization": "Client-ID 546c25a59c58ad7",
+          "Content-Type": "application/json"
         },
-        body: fd
+        body: JSON.stringify({ image: base64, type: "base64" })
       })
 
       const json = await res.json()
       if (json.success && json.data?.link) {
-        const directUrl = json.data.link
-        setUrl(directUrl)
-        setUploadMsg("✅ Upload Berhasil!")
+        setUrl(json.data.link)
+        setUploadMsg("✅ Berhasil!")
         setTimeout(() => setUploadMsg(""), 4000)
       } else {
-        const err = json.data?.error || "Gagal mengunggah"
-        setUploadMsg(`❌ Gagal: ${err}`)
+        setUploadMsg("❌ " + (json.data?.error || "Gagal"))
       }
     } catch (err) {
-      console.error("Upload error:", err)
-      setUploadMsg(`❌ Error jaringan: ${err.message || "Coba lagi"}`)
+      setUploadMsg("❌ " + (err.message || "").substring(0, 50))
     } finally {
       setUploadingImg(false)
     }
