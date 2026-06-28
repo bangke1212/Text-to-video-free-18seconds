@@ -72,6 +72,7 @@ export default function App() {
   const [imgUrl2, setImgUrl2] = useState("")
   const [uploadingImg, setUploadingImg] = useState(false)
   const [uploadMsg, setUploadMsg] = useState("")
+  const [imgbbKey, setImgbbKey] = useState(() => localStorage.getItem("imgbb_api_key") || "")
   
   // Progress & Statuses
   const [status, setStatus] = useState("idle") 
@@ -160,10 +161,78 @@ export default function App() {
     e.preventDefault()
     const trimmed = apiKey.trim()
     localStorage.setItem("agnes_api_key", trimmed)
-    alert("✨ API Key Agnes AI berhasil disimpan dengan aman di browser lokal Anda!")
+    const trimmedImgbb = imgbbKey.trim()
+    localStorage.setItem("imgbb_api_key", trimmedImgbb)
+    if (trimmedImgbb) {
+      alert("✨ API Key Agnes & ImgBB berhasil disimpan di browser lokal Anda!")
+    } else {
+      alert("✨ API Key Agnes AI berhasil disimpan!\n\n⚠️ Isi juga ImgBB API Key agar fitur upload gambar berfungsi.\nDapatkan gratis di: https://api.imgbb.com/")
+    }
   }
 
-  const handleGenerate = async () => {
+  
+  // =============================================
+  // UPLOAD GAMBAR KE IMGBB (ANONYMOUS FREE API)
+  // =============================================
+  const handleImageUpload = async (e, target) => {
+    const file = e.target?.files?.[0]
+    if (!file) return
+    
+    // Validasi ukuran & tipe
+    if (file.size > 32 * 1024 * 1024) {
+      setUploadMsg("❌ Ukuran maksimal 32MB!")
+      return
+    }
+    if (!file.type.startsWith("image/")) {
+      setUploadMsg("❌ Hanya file gambar yang didukung!")
+      return
+    }
+
+    setUploadingImg(true)
+    setUploadMsg("⏳ Mengupload ke ImgBB...")
+
+    try {
+      const formData = new FormData()
+      formData.append("image", file)
+      
+      // Ganti dengan API Key ImgBB kamu sendiri dari https://api.imgbb.com/
+      const IMGBB_API_KEY = imgbbKey.trim() || "YOUR_IMGBB_API_KEY_HERE"
+      const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
+        method: "POST",
+        body: formData
+      })
+      
+      const json = await res.json()
+      if (json.success) {
+        const url = json.data.url
+        if (target === "img1") {
+          setImgUrl1(url)
+        } else {
+          setImgUrl2(url)
+        }
+        setUploadMsg(`✅ Berhasil! URL: ${url.substring(0, 45)}...`)
+        setTimeout(() => setUploadMsg(""), 4000)
+      } else {
+        setUploadMsg(`❌ Gagal upload: ${json.error?.message || "Coba lagi"}`)
+      }
+    } catch (err) {
+      console.error("Upload error:", err)
+      setUploadMsg("❌ Error jaringan. Coba lagi atau paste URL manual.")
+    } finally {
+      setUploadingImg(false)
+    }
+  }
+
+  const handleDrop = (e, target) => {
+    e.preventDefault()
+    const file = e.dataTransfer?.files?.[0]
+    if (file) {
+      const fakeE = { target: { files: [file] } }
+      handleImageUpload(fakeE, target)
+    }
+  }
+
+const handleGenerate = async () => {
     if (!apiKey) {
       alert("⚠️ Masukkan API Key Agnes AI Anda terlebih dahulu di kolom header kanan atas!")
       return
@@ -313,29 +382,44 @@ export default function App() {
 
         {/* API SETTINGS QUICK FORM */}
         <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-          <form onSubmit={handleSaveApiKey} style={{ display: "flex", position: "relative" }}>
-            <Key size={14} color="#71717a" style={{ position: "absolute", left: "0.75rem", top: "50%", transform: "translateY(-50%)", zIndex: 12 }} />
-            <input 
-              type="password"
-              placeholder="Masukkan API Key Agnes..."
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              style={{
-                background: "#09090b", border: "1px solid #27272a", borderRadius: "0.5rem 0 0 0.5rem", color: "#fff",
-                padding: "0.5rem 0.5rem 0.5rem 2.25rem", fontSize: "0.85rem", width: "220px", transition: "all 0.2s", outline: "none"
-              }}
-            />
-            <button 
-              type="submit"
-              style={{
-                background: "linear-gradient(135deg, #f43f5e, #8b5cf6)", border: 0, borderRadius: "0 0.5rem 0.5rem 0", color: "#fff",
-                padding: "0 1rem", fontSize: "0.8rem", fontWeight: 700, cursor: "pointer", transition: "opacity 0.2s"
-              }}
-              onMouseEnter={(e) => e.target.style.opacity = 0.9}
-              onMouseLeave={(e) => e.target.style.opacity = 1}
-            >
-              Simpan
-            </button>
+          <form onSubmit={handleSaveApiKey} style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+            <div style={{ display: "flex", position: "relative" }}>
+              <Key size={14} color="#f43f5e" style={{ position: "absolute", left: "0.75rem", top: "50%", transform: "translateY(-50%)", zIndex: 12 }} />
+              <input 
+                type="password"
+                placeholder="Agnes API Key..."
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                style={{
+                  background: "#09090b", border: "1px solid #27272a", borderRadius: "0.5rem 0 0 0.5rem", color: "#fff",
+                  padding: "0.5rem 0.5rem 0.5rem 2.25rem", fontSize: "0.78rem", width: "180px", transition: "all 0.2s", outline: "none"
+                }}
+              />
+              <button 
+                type="submit"
+                style={{
+                  background: "linear-gradient(135deg, #f43f5e, #8b5cf6)", border: 0, borderRadius: "0 0.5rem 0.5rem 0", color: "#fff",
+                  padding: "0 0.65rem", fontSize: "0.72rem", fontWeight: 700, cursor: "pointer", transition: "opacity 0.2s", whiteSpace: "nowrap"
+                }}
+                onMouseEnter={(e) => e.target.style.opacity = 0.9}
+                onMouseLeave={(e) => e.target.style.opacity = 1}
+              >
+                Simpan
+              </button>
+            </div>
+            <div style={{ display: "flex", position: "relative" }}>
+              <Key size={14} color="#22c55e" style={{ position: "absolute", left: "0.75rem", top: "50%", transform: "translateY(-50%)", zIndex: 12 }} />
+              <input 
+                type="password"
+                placeholder="ImgBB API Key (upload)..."
+                value={imgbbKey}
+                onChange={(e) => setImgbbKey(e.target.value)}
+                style={{
+                  background: "#09090b", border: "1px solid #27272a", borderRadius: "0.5rem", color: "#fff",
+                  padding: "0.5rem 0.5rem 0.5rem 2.25rem", fontSize: "0.78rem", width: "180px", transition: "all 0.2s", outline: "none"
+                }}
+              />
+            </div>
           </form>
           <a 
             href="https://platform.agnes-ai.com/settings/apiKeys" 
@@ -463,7 +547,7 @@ export default function App() {
                     {uploadingImg ? (
                       <><RefreshCw size={18} className="spin" style={{ animation: "spin 1s linear infinite" }} color="#8b5cf6" /><span style={{ color: "#a1a1aa", fontSize: "0.85rem" }}>Uploading...</span></>
                     ) : (
-                      <><Upload size={18} color="#8b5cf6" /><span style={{ color: "#a1a1aa", fontSize: "0.85rem", fontWeight: 600 }}>Klik atau Drag & Drop Foto di Sini</span><span style={{ color: "#52525b", fontSize: "0.7rem" }}>— JPG, PNG, max 32MB</span></>
+                      <><Upload size={18} color="#8b5cf6" /><span style={{ color: "#a1a1aa", fontSize: "0.85rem", fontWeight: 600 }}>Klik atau Drag & Drop Foto di Sini</span><span style={{ color: "#52525b", fontSize: "0.7rem" }}>— JPG, PNG, max 32MB · ImgBB</span></>
                     )}
                   </label>
                   
@@ -1032,4 +1116,5 @@ export default function App() {
     </div>
   )
 }
+
 
