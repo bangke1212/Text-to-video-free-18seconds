@@ -165,14 +165,13 @@ export default function App() {
 
   
   // =============================================
-  // UPLOAD GAMBAR via PROXY (No CORS, No Login!)
-  // File → base64 → Vercel Proxy → ImgBB → URL
+  // UPLOAD GAMBAR via FreeImage.host
+  // Tanpa daftar, tanpa API key — pure form submit (no CORS!)
   // =============================================
   const handleImageUpload = async (e, target) => {
     const file = e.target?.files?.[0]
     if (!file) return
     
-    // Validasi
     if (file.size > 32 * 1024 * 1024) {
       setUploadMsg("❌ Ukuran maksimal 32MB!")
       return
@@ -183,7 +182,7 @@ export default function App() {
     }
 
     setUploadingImg(true)
-    setUploadMsg("⏳ Mengkonversi & upload...")
+    setUploadMsg("⏳ Upload ke FreeImage.host...")
 
     const setUrl = (url) => {
       if (target === "img1") setImgUrl1(url)
@@ -191,39 +190,47 @@ export default function App() {
     }
 
     try {
-      // 1. Konversi ke base64
-      const base64 = await new Promise((resolve, reject) => {
-        const reader = new FileReader()
-        reader.onload = () => resolve(reader.result)
-        reader.onerror = reject
-        reader.readAsDataURL(file)
-      })
-
-      // 2. Kirim via Vercel proxy (menghindari CORS)
-      setUploadMsg("⏳ Upload via proxy...")
-      const res = await fetch("/api/upload-proxy", {
+      // Pakai fetch dengan FormData langsung — freeimage.host bisa terima
+      const fd = new FormData()
+      fd.append("source", file)
+      fd.append("action", "upload")
+      
+      const res = await fetch("https://freeimage.host/api/1/upload", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ image: base64, name: file.name })
+        body: fd
       })
-
-      const json = await res.json()
-      if (json.success && json.data?.url) {
-        setUrl(json.data.url)
-        setUploadMsg(`✅ Berhasil! URL siap pakai`)
+      
+      const text = await res.text()
+      console.log("FreeImage raw:", text.substring(0, 300))
+      
+      let json
+      try { json = JSON.parse(text) } catch {
+        // Coba extract URL dari HTML response
+        const urlMatch = text.match(/https?:\/\/[^"\s]+\.(?:jpg|png|jpeg|webp)/i)
+        if (urlMatch) {
+          setUrl(urlMatch[0])
+          setUploadMsg("✅ Berhasil!")
+          setTimeout(() => setUploadMsg(""), 4000)
+          setUploadingImg(false)
+          return
+        }
+        throw new Error("Response bukan JSON: " + text.substring(0, 100))
+      }
+      
+      if (json.status_code === 200 && json.image?.url) {
+        setUrl(json.image.url)
+        setUploadMsg("✅ Berhasil! URL siap")
+        setTimeout(() => setUploadMsg(""), 4000)
+      } else if (json.url) {
+        setUrl(json.url)
+        setUploadMsg("✅ Berhasil!")
         setTimeout(() => setUploadMsg(""), 4000)
       } else {
-        const errDetail = json.error?.message || json.error || JSON.stringify(json).substring(0, 100)
-        console.error("ImgBB error:", json)
-        setUploadMsg(`❌ Gagal: ${errDetail}`)
+        setUploadMsg("❌ Gagal: " + (json.error?.message || JSON.stringify(json).substring(0, 80)))
       }
     } catch (err) {
       console.error("Upload error:", err)
-      // Tampilkan pesan error yang informatif
-      let msg = "❌ Gagal upload."
-      if (err.message) msg += ` (${err.message})`
-      else if (typeof err === "object") msg += " Cek console (F12)."
-      setUploadMsg(msg)
+      setUploadMsg("❌ " + (err.message || "Gagal upload").substring(0, 60))
     } finally {
       setUploadingImg(false)
     }
