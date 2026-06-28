@@ -165,13 +165,14 @@ export default function App() {
 
   
   // =============================================
-  // UPLOAD GAMBAR KE IMGUR (ANONYMOUS - NO LOGIN!)
+  // UPLOAD GAMBAR via PROXY (No CORS, No Login!)
+  // File → base64 → Vercel Proxy → ImgBB → URL
   // =============================================
   const handleImageUpload = async (e, target) => {
     const file = e.target?.files?.[0]
     if (!file) return
     
-    // Validasi ukuran & tipe
+    // Validasi
     if (file.size > 32 * 1024 * 1024) {
       setUploadMsg("❌ Ukuran maksimal 32MB!")
       return
@@ -182,48 +183,41 @@ export default function App() {
     }
 
     setUploadingImg(true)
-    setUploadMsg("⏳ Mengupload...")
+    setUploadMsg("⏳ Mengkonversi & upload...")
+
+    const setUrl = (url) => {
+      if (target === "img1") setImgUrl1(url)
+      else setImgUrl2(url)
+    }
 
     try {
-      // Konversi file ke base64
-      const toBase64 = (f) => new Promise((resolve, reject) => {
+      // 1. Konversi ke base64
+      const base64 = await new Promise((resolve, reject) => {
         const reader = new FileReader()
-        reader.onload = () => resolve(reader.result.split(",")[1])
+        reader.onload = () => resolve(reader.result)
         reader.onerror = reject
-        reader.readAsDataURL(f)
+        reader.readAsDataURL(file)
       })
-      
-      const base64 = await toBase64(file)
-      
-      // Upload ke Imgur Anonymous (client_id publik dari Imgur, gratis, no login!)
-      const formData = new FormData()
-      formData.append("image", base64)
-      formData.append("type", "base64")
-      
-      const res = await fetch("https://api.imgur.com/3/upload", {
+
+      // 2. Kirim via Vercel proxy (menghindari CORS)
+      setUploadMsg("⏳ Upload via proxy...")
+      const res = await fetch("/api/upload-proxy", {
         method: "POST",
-        headers: {
-          "Authorization": "Client-ID 546c25a59c58ad7"  // Imgur public client ID
-        },
-        body: formData
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image: base64, name: file.name })
       })
-      
+
       const json = await res.json()
-      if (json.success) {
-        const url = json.data.link
-        if (target === "img1") {
-          setImgUrl1(url)
-        } else {
-          setImgUrl2(url)
-        }
-        setUploadMsg(`✅ Berhasil! ${url.substring(0, 45)}...`)
+      if (json.success && json.data?.url) {
+        setUrl(json.data.url)
+        setUploadMsg(`✅ Berhasil! URL siap pakai`)
         setTimeout(() => setUploadMsg(""), 4000)
       } else {
-        setUploadMsg(`❌ Gagal: ${json.data?.error || "Coba lagi"}`)
+        setUploadMsg(`❌ Gagal: ${json.error || "Unknown error"}`)
       }
     } catch (err) {
       console.error("Upload error:", err)
-      setUploadMsg("❌ Error jaringan. Coba lagi atau paste URL manual.")
+      setUploadMsg("❌ Gagal upload. Coba paste URL manual.")
     } finally {
       setUploadingImg(false)
     }
