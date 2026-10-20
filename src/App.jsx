@@ -8,6 +8,22 @@ import {
 
 const VIDEO_MODEL = "agnes-video-2.5-flash"
 
+const readApiError = async (response) => {
+  const raw = await response.text()
+  if (!raw) return `Request gagal (${response.status})`
+
+  try {
+    const parsed = JSON.parse(raw)
+    const detail = parsed.detail || parsed.error?.message || parsed.error
+    if (typeof detail === "string") return detail
+    if (detail) return JSON.stringify(detail)
+  } catch {
+    // Some gateway errors are returned as plain text.
+  }
+
+  return raw.slice(0, 500)
+}
+
 // Aspect ratio options
 const ASPECT_RATIOS = [
   { value: "16:9", label: "Landscape (16:9)", desc: "Cocok untuk YouTube, Presentasi, Film", w: 1152, h: 768, icon: "🖥️" },
@@ -100,7 +116,8 @@ export default function App() {
     if (!videoId || (status !== "queued" && status !== "generating")) return
 
     let isMounted = true
-    let intervalId = setInterval(async () => {
+    let intervalId
+    const pollStatus = async () => {
       try {
         const response = await fetch(`https://apihub.agnes-ai.com/agnesapi?video_id=${videoId}&model_name=${VIDEO_MODEL}`, {
           headers: {
@@ -109,7 +126,7 @@ export default function App() {
         })
         
         if (!response.ok) {
-          throw new Error("Failed to fetch status from Agnes API")
+          throw new Error(await readApiError(response))
         }
         
         const data = await response.json()
@@ -123,7 +140,11 @@ export default function App() {
         
         if (data.status === "completed") {
           setStatus("completed")
-          setVideoUrl(data.url || data.remixed_from_video_id)
+          const completedUrl = data.url || data.remixed_from_video_id
+          if (!completedUrl) {
+            throw new Error("Agnes menyatakan selesai, tetapi URL video tidak dikembalikan.")
+          }
+          setVideoUrl(completedUrl)
           setProgress(100)
           
           const newItem = {
@@ -131,7 +152,7 @@ export default function App() {
             videoId: videoId,
             prompt,
             mode,
-            videoUrl: data.url || data.remixed_from_video_id,
+            videoUrl: completedUrl,
             timestamp: new Date().toLocaleString("id-ID"),
             aspectRatio,
             resolution: resTier,
@@ -141,15 +162,23 @@ export default function App() {
           clearInterval(intervalId)
         } else if (data.status === "failed") {
           setStatus("failed")
-          setErrorMsg(data.error?.message || "Gagal me-render video di server Agnes AI.")
+          setErrorMsg(typeof data.error === "string" ? data.error : data.error?.message || "Gagal me-render video di server Agnes AI.")
           clearInterval(intervalId)
         } else if (data.status === "in_progress") {
           setStatus("generating")
         }
       } catch (err) {
         console.error("Polling error:", err)
+        setStatus("failed")
+        setErrorMsg(err.message || "Gagal memeriksa status video di Agnes AI.")
+        clearInterval(intervalId)
       }
-    }, 4000)
+    }
+
+    // Agnes recommends polling every 1–2 seconds. Run once immediately so
+    // the UI does not look stuck for the first interval.
+    pollStatus()
+    intervalId = setInterval(pollStatus, 2000)
 
     return () => {
       isMounted = false
@@ -331,7 +360,8 @@ const handleGenerate = async () => {
       seconds: String(numFrames),
       mode: apiMode,
       size: tier.size,
-      aspect_ratio: aspectRatio
+      aspect_ratio: aspectRatio,
+      n: 1
     }
 
     if (negativePrompt.trim()) payload.prompt += `\nAvoid: ${negativePrompt.trim()}`
@@ -368,13 +398,16 @@ const handleGenerate = async () => {
       })
 
       if (!response.ok) {
-        const errText = await response.text()
-        throw new Error(errText || `Gagal me-render video (${response.status})`)
+        throw new Error(await readApiError(response))
       }
 
       const data = await response.json()
-      setTaskId(data.task_id || data.id)
-      setVideoId(data.video_id)
+      const returnedVideoId = data.video_id
+      if (!returnedVideoId) {
+        throw new Error("Agnes tidak mengembalikan video_id. Response: " + JSON.stringify(data).slice(0, 500))
+      }
+      setTaskId(data.task_id || data.id || returnedVideoId)
+      setVideoId(returnedVideoId)
       setStatus("queued")
     } catch (err) {
       console.error(err)
