@@ -334,7 +334,7 @@ const handleGenerate = async () => {
     height = Math.round(height / 8) * 8
 
     const payload = {
-      model: "agnes-video-v2.0",
+      model: "agnes-video-v2.5",
       prompt: prompt.trim(),
       num_frames: numFrames,
       frame_rate: 24,
@@ -1097,14 +1097,14 @@ const handleGenerate = async () => {
             <div style={{ background: "#141416", border: "1px solid #232329", borderRadius: "1rem", padding: "2rem", boxShadow: "0 10px 30px rgba(0,0,0,0.5)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", borderBottom: "1px solid #232329", paddingBottom: "1rem", marginBottom: "1.75rem" }}>
                 <Film size={20} color="#ec4899" />
-                <h2 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 800 }}>Spesifikasi Agnes Video V2.0</h2>
+                <h2 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 800 }}>Spesifikasi Agnes Video V2.5</h2>
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", fontSize: "0.875rem", lineHeight: 1.6, color: "#a1a1aa" }}>
                 <div>
                   <h4 style={{ margin: "0 0 0.35rem", color: "#fff", fontSize: "0.95rem", fontWeight: 700 }}>⚡ Integrasi Cloud Otomatis</h4>
                   <p style={{ margin: 0 }}>
-                    Aplikasi ini berkomunikasi langsung dengan gateway model <code>agnes-video-v2.0</code> dari Sapiens AI Labs. Seluruh rendering asinkron diproses menggunakan arsitektur Diffusion Transformer (DiT).
+                    Aplikasi ini berkomunikasi langsung dengan gateway model <code>agnes-video-v2.5</code> dari Sapiens AI Labs. Seluruh rendering asinkron diproses menggunakan arsitektur Diffusion Transformer (DiT).
                   </p>
                 </div>
                 
@@ -1182,12 +1182,11 @@ const handleGenerate = async () => {
       {/* FOOTER SECTION */}
       <footer style={{ borderTop: "1px solid #1e1e24", padding: "2rem", textAlign: "center", marginTop: "5rem", fontSize: "0.8rem", color: "#71717a" }}>
         <p style={{ margin: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: "0.35rem" }}>
-          Dikembangkan dengan <Heart size={12} fill="#f43f5e" color="#f43f5e" /> oleh <strong>bangke1212</strong>. Powered by Agnes Video V2.0 & Zaro Labs © 2026.
+              Dikembangkan dengan <Heart size={12} fill="#f43f5e" color="#f43f5e" /> oleh <strong>bangke1212</strong>. Powered by Agnes Video V2.5 & Zaro Labs © 2026.
         </p>
       </footer>
 
     </div>
   )
 }
-
 

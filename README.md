@@ -2,7 +2,7 @@
 
 > **100% Gratis** — Generate video sinematik hingga 18 detik, 1080p Full HD. Tanpa kartu kredit!
 
-Powered by **Agnes Video V2.0** from Sapiens AI Labs.
+Powered by **Agnes Video V2.5** from Sapiens AI Labs.
 
 ## ✨ Fitur
 
