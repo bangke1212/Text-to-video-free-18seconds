@@ -6,6 +6,8 @@ import {
   History, HelpCircle as HelpIcon, Heart, Info, Copy, Check
 } from "lucide-react"
 
+const VIDEO_MODEL = "agnes-video-2.5-flash"
+
 // Aspect ratio options
 const ASPECT_RATIOS = [
   { value: "16:9", label: "Landscape (16:9)", desc: "Cocok untuk YouTube, Presentasi, Film", w: 1152, h: 768, icon: "🖥️" },
@@ -14,19 +16,17 @@ const ASPECT_RATIOS = [
   { value: "4:3", label: "Classic (4:3)", desc: "Rasio Retro, Kamera Klasik", w: 1024, h: 768, icon: "📺" }
 ]
 
-// Frame and duration mappings
+// Agnes Video 2.5 Flash accepts 4–12 seconds; it does not accept raw frame counts.
 const FRAME_OPTIONS = [
-  { value: 81, label: "3 Detik (81 frames)", fps: 24, desc: "Sangat cepat, hemat kuota", durationText: "3s" },
-  { value: 121, label: "5 Detik (121 frames)", fps: 24, desc: "Kualitas standar produksi", durationText: "5s" },
-  { value: 241, label: "10 Detik (241 frames)", fps: 24, desc: "Visual cinematic panjang", durationText: "10s" },
-  { value: 441, label: "18 Detik (441 frames)", fps: 24, desc: "Batas maksimal Agnes API", durationText: "18s" }
+  { value: 4, label: "4 Detik", desc: "Render cepat", durationText: "4s" },
+  { value: 5, label: "5 Detik", desc: "Kualitas standar produksi", durationText: "5s" },
+  { value: 10, label: "10 Detik", desc: "Visual cinematic panjang", durationText: "10s" },
+  { value: 12, label: "12 Detik", desc: "Batas maksimum model", durationText: "12s" }
 ]
 
-// Resolutions standard mapping
+// Flash is restricted to the 720P size tier.
 const RESOLUTION_TIERS = [
-  { id: "480p", label: "480p (Standard Quality)", desc: "Rendering super cepat & lancar", multiplier: 0.6, badge: "FAST" },
-  { id: "720p", label: "720p (HD Quality)", desc: "Keseimbangan kualitas & kecepatan", multiplier: 1.0, badge: "POPULER" },
-  { id: "1080p", label: "1080p (Full HD Cinematic)", desc: "Visual ultra premium, detail bioskop", multiplier: 1.5, badge: "PREMIUM" }
+  { id: "720p", label: "720p (HD Quality)", desc: "Satu-satunya resolusi Agnes Video 2.5 Flash", size: "720P", badge: "FLASH" }
 ]
 
 // Sample Prompts
@@ -62,7 +62,7 @@ export default function App() {
   const [prompt, setPrompt] = useState("")
   const [negativePrompt, setNegativePrompt] = useState("")
   const [aspectRatio, setAspectRatio] = useState("16:9")
-  const [numFrames, setNumFrames] = useState(121)
+  const [numFrames, setNumFrames] = useState(5)
   const [resTier, setResTier] = useState("720p")
   const [seed, setSeed] = useState("")
   const [mode, setMode] = useState("txt2vid") 
@@ -102,7 +102,7 @@ export default function App() {
     let isMounted = true
     let intervalId = setInterval(async () => {
       try {
-        const response = await fetch(`https://apihub.agnes-ai.com/agnesapi?video_id=${videoId}`, {
+        const response = await fetch(`https://apihub.agnes-ai.com/agnesapi?video_id=${videoId}&model_name=${VIDEO_MODEL}`, {
           headers: {
             "Authorization": `Bearer ${apiKey}`
           }
@@ -123,7 +123,7 @@ export default function App() {
         
         if (data.status === "completed") {
           setStatus("completed")
-          setVideoUrl(data.remixed_from_video_id)
+          setVideoUrl(data.url || data.remixed_from_video_id)
           setProgress(100)
           
           const newItem = {
@@ -131,7 +131,7 @@ export default function App() {
             videoId: videoId,
             prompt,
             mode,
-            videoUrl: data.remixed_from_video_id,
+            videoUrl: data.url || data.remixed_from_video_id,
             timestamp: new Date().toLocaleString("id-ID"),
             aspectRatio,
             resolution: resTier,
@@ -323,28 +323,18 @@ const handleGenerate = async () => {
     setTaskId("")
     setVideoId("")
 
-    const selectedRatio = ASPECT_RATIOS.find(r => r.value === aspectRatio)
-    const tier = RESOLUTION_TIERS.find(t => t.id === resTier)
-    
-    let width = Math.round(selectedRatio.w * tier.multiplier)
-    let height = Math.round(selectedRatio.h * tier.multiplier)
-    
-    // Normalize multiples of 8
-    width = Math.round(width / 8) * 8
-    height = Math.round(height / 8) * 8
-
+    const tier = RESOLUTION_TIERS.find(t => t.id === resTier) || RESOLUTION_TIERS[0]
+    const apiMode = mode === "txt2vid" ? "text" : mode === "img2vid" ? "reference" : "keyframe"
     const payload = {
-      model: "agnes-video-v2.5",
+      model: VIDEO_MODEL,
       prompt: prompt.trim(),
-      num_frames: numFrames,
-      frame_rate: 24,
-      width,
-      height
+      seconds: String(numFrames),
+      mode: apiMode,
+      size: tier.size,
+      aspect_ratio: aspectRatio
     }
 
-    if (negativePrompt.trim()) {
-      payload.negative_prompt = negativePrompt.trim()
-    }
+    if (negativePrompt.trim()) payload.prompt += `\nAvoid: ${negativePrompt.trim()}`
     if (seed && !isNaN(Number(seed))) {
       payload.seed = Number(seed)
     }
@@ -355,17 +345,16 @@ const handleGenerate = async () => {
         setStatus("idle")
         return
       }
-      payload.image = imgUrl1.trim()
+      payload.prompt += "\nUse <Picture 1> as the visual reference."
+      payload.images = [imgUrl1.trim()]
     } else if (mode === "keyframes") {
       if (!imgUrl1.trim() || !imgUrl2.trim()) {
         alert("⚠️ Mohon masukkan kedua URL gambar keyframe awal dan akhir!")
         setStatus("idle")
         return
       }
-      payload.extra_body = {
-        image: [imgUrl1.trim(), imgUrl2.trim()],
-        mode: "keyframes"
-      }
+      payload.first_frame = imgUrl1.trim()
+      payload.last_frame = imgUrl2.trim()
     }
 
     try {
@@ -426,10 +415,10 @@ const handleGenerate = async () => {
                 Text-to-Video Free
               </h1>
               <span style={{ background: "rgba(139, 92, 246, 0.15)", border: "1px solid rgba(139, 92, 246, 0.3)", color: "#c084fc", fontSize: "0.65rem", padding: "0.15rem 0.4rem", borderRadius: "2rem", fontWeight: 700 }}>
-                18s Max
+                12s Max
               </span>
             </div>
-            <p style={{ margin: 0, fontSize: "0.75rem", color: "#a1a1aa" }}>Max 18 detik · 1080p · Image-to-Video · Keyframe · Gratis</p>
+            <p style={{ margin: 0, fontSize: "0.75rem", color: "#a1a1aa" }}>Max 12 detik · 720P Flash · Image-to-Video · Keyframe · Gratis</p>
           </div>
         </div>
 
@@ -757,7 +746,7 @@ const handleGenerate = async () => {
 
               {/* DURATION PRESET LIST */}
               <div style={{ marginBottom: "1.75rem" }}>
-                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#a1a1aa", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.6rem" }}>Atur Durasi & Frames</label>
+                <label style={{ display: "block", fontSize: "0.8rem", fontWeight: 700, color: "#a1a1aa", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.6rem" }}>Atur Durasi</label>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
                   {FRAME_OPTIONS.map(opt => (
                     <button
@@ -1097,34 +1086,33 @@ const handleGenerate = async () => {
             <div style={{ background: "#141416", border: "1px solid #232329", borderRadius: "1rem", padding: "2rem", boxShadow: "0 10px 30px rgba(0,0,0,0.5)" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", borderBottom: "1px solid #232329", paddingBottom: "1rem", marginBottom: "1.75rem" }}>
                 <Film size={20} color="#ec4899" />
-                <h2 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 800 }}>Spesifikasi Agnes Video V2.5</h2>
+                <h2 style={{ margin: 0, fontSize: "1.1rem", fontWeight: 800 }}>Spesifikasi Agnes Video 2.5 Flash</h2>
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: "1.5rem", fontSize: "0.875rem", lineHeight: 1.6, color: "#a1a1aa" }}>
                 <div>
                   <h4 style={{ margin: "0 0 0.35rem", color: "#fff", fontSize: "0.95rem", fontWeight: 700 }}>⚡ Integrasi Cloud Otomatis</h4>
                   <p style={{ margin: 0 }}>
-                    Aplikasi ini berkomunikasi langsung dengan gateway model <code>agnes-video-v2.5</code> dari Sapiens AI Labs. Seluruh rendering asinkron diproses menggunakan arsitektur Diffusion Transformer (DiT).
+                    Aplikasi ini berkomunikasi langsung dengan gateway model <code>agnes-video-2.5-flash</code> dari Sapiens AI Labs.
                   </p>
                 </div>
                 
                 <div>
-                  <h4 style={{ margin: "0 0 0.35rem", color: "#fff", fontSize: "0.95rem", fontWeight: 700 }}>📏 Aturan Frame & Durasi (8n + 1)</h4>
+                  <h4 style={{ margin: "0 0 0.35rem", color: "#fff", fontSize: "0.95rem", fontWeight: 700 }}>📏 Aturan Durasi Agnes Flash</h4>
                   <p style={{ margin: 0 }}>
-                    Durasi video Agnes diatur berdasarkan frame standar FPS 24. Pilihan yang tersedia di Studio secara otomatis dikonversikan ke API sesuai aturan internal:
+                    Agnes Video 2.5 Flash menerima durasi 4–12 detik melalui parameter <code>seconds</code>; aplikasi mengirim durasi sebagai detik, bukan frame mentah.
                   </p>
                   <ul style={{ margin: "0.5rem 0 0", paddingLeft: "1.25rem", fontSize: "0.8rem" }}>
-                    <li><strong>3 Detik</strong> = 81 frames</li>
-                    <li><strong>5 Detik</strong> = 121 frames</li>
-                    <li><strong>10 Detik</strong> = 241 frames</li>
-                    <li><strong>18 Detik</strong> = 441 frames (Batas durasi maksimal)</li>
+                    <li><strong>4 detik</strong> = minimum</li>
+                    <li><strong>5 atau 10 detik</strong> = preset standar</li>
+                    <li><strong>12 detik</strong> = batas maksimum</li>
                   </ul>
                 </div>
 
                 <div>
                   <h4 style={{ margin: "0 0 0.35rem", color: "#fff", fontSize: "0.95rem", fontWeight: 700 }}>📐 Ketentuan Resolusi & Dimensi</h4>
                   <p style={{ margin: 0 }}>
-                    Resolusi gambar maksimum yang didukung adalah <strong>480p, 720p, dan 1080p</strong>. Sistem standardisasi Agnes akan secara otomatis menyesuaikan parameter dimensi terdekat berdasarkan rasio yang Anda pilih (16:9, 9:16, 1:1, atau 4:3).
+                    Model Flash hanya menerima ukuran <strong>720P</strong>. Rasio 16:9, 9:16, 1:1, dan 4:3 tetap dipilih melalui parameter <code>aspect_ratio</code>.
                   </p>
                 </div>
 
@@ -1182,11 +1170,10 @@ const handleGenerate = async () => {
       {/* FOOTER SECTION */}
       <footer style={{ borderTop: "1px solid #1e1e24", padding: "2rem", textAlign: "center", marginTop: "5rem", fontSize: "0.8rem", color: "#71717a" }}>
         <p style={{ margin: 0, display: "flex", alignItems: "center", justifyContent: "center", gap: "0.35rem" }}>
-              Dikembangkan dengan <Heart size={12} fill="#f43f5e" color="#f43f5e" /> oleh <strong>bangke1212</strong>. Powered by Agnes Video V2.5 & Zaro Labs © 2026.
+              Dikembangkan dengan <Heart size={12} fill="#f43f5e" color="#f43f5e" /> oleh <strong>bangke1212</strong>. Powered by Agnes Video 2.5 Flash & Zaro Labs © 2026.
         </p>
       </footer>
 
     </div>
   )
 }
-

@@ -1,8 +1,7 @@
 # 🎬 Text-to-Video Free 18 Seconds
 
-> **100% Gratis** — Generate video sinematik hingga 18 detik, 1080p Full HD. Tanpa kartu kredit!
-
-Powered by **Agnes Video V2.5** from Sapiens AI Labs.
+> **Gratis** — Generate video sinematik hingga 12 detik dalam 720P. Tanpa kartu kredit!
+Powered by **Agnes Video 2.5 Flash** from Sapiens AI Labs.
 
 ## ✨ Fitur
 
@@ -11,8 +10,8 @@ Powered by **Agnes Video V2.5** from Sapiens AI Labs.
 | 🎥 Text-to-Video | Prompt teks → video |
 | 🖼️ Image-to-Video | Animasi gambar statis |
 | ✨ Keyframe Morph | Transisi 2 gambar |
-| ⏱️ Max 18s | 3s / 5s / 10s / 18 detik |
-| 📺 Resolusi | 480p / 720p / 1080p |
+| ⏱️ Durasi | 4s / 5s / 10s / 12s |
+| 📺 Resolusi | 720P Flash |
 | 📐 Aspek | 16:9 / 9:16 TikTok / 1:1 / 4:3 |
 | 💰 Harga | GRATIS permanen |
 
