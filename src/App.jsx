@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react"
+import React, { useState, useEffect, useRef } from "react"
 import { 
   Play, Sparkles, Sliders, Image as ImageIcon, Video, HelpCircle, AlertCircle, Upload, ImagePlus, 
   Settings, Key, CheckCircle, RefreshCw, Layers, Download, ExternalLink, Moon,
@@ -10,18 +10,25 @@ const VIDEO_MODEL = "agnes-video-2.5-flash"
 
 const readApiError = async (response) => {
   const raw = await response.text()
-  if (!raw) return `Request gagal (${response.status})`
+  let message = raw || `Request gagal (${response.status})`
+  let code = ""
 
-  try {
-    const parsed = JSON.parse(raw)
-    const detail = parsed.detail || parsed.error?.message || parsed.error
-    if (typeof detail === "string") return detail
-    if (detail) return JSON.stringify(detail)
-  } catch {
-    // Some gateway errors are returned as plain text.
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw)
+      code = parsed.code || parsed.error?.code || ""
+      const detail = parsed.detail || parsed.message || parsed.error?.message || parsed.error
+      if (typeof detail === "string") message = detail
+      else if (detail) message = JSON.stringify(detail)
+    } catch {
+      // Some gateway errors are returned as plain text.
+    }
   }
 
-  return raw.slice(0, 500)
+  const error = new Error(message.slice(0, 500))
+  error.code = code
+  error.status = response.status
+  return error
 }
 
 // Aspect ratio options
@@ -97,6 +104,10 @@ export default function App() {
   const [videoId, setVideoId] = useState("")
   const [progress, setProgress] = useState(0)
   const [videoUrl, setVideoUrl] = useState("")
+  const [retrySeconds, setRetrySeconds] = useState(0)
+  const [retryAttempt, setRetryAttempt] = useState(0)
+  const retryTimerRef = useRef(null)
+  const retryIntervalRef = useRef(null)
   
   // History Saved
   const [history, setHistory] = useState(() => {
@@ -110,6 +121,11 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("agnes_video_history", JSON.stringify(history))
   }, [history])
+
+  useEffect(() => () => {
+    clearTimeout(retryTimerRef.current)
+    clearInterval(retryIntervalRef.current)
+  }, [])
 
   // Polling Status Video
   useEffect(() => {
@@ -126,7 +142,7 @@ export default function App() {
         })
         
         if (!response.ok) {
-          throw new Error(await readApiError(response))
+          throw await readApiError(response)
         }
         
         const data = await response.json()
@@ -335,7 +351,63 @@ export default function App() {
     }
   }
 
-const handleGenerate = async () => {
+  const scheduleQueueRetry = (payload, attempt) => {
+    const delaySeconds = 180 + Math.floor(Math.random() * 301)
+    setRetryAttempt(attempt)
+    setRetrySeconds(delaySeconds)
+    setStatus("retrying")
+    setErrorMsg("Antrean Agnes sedang penuh. Request akan dicoba ulang otomatis.")
+
+    clearInterval(retryIntervalRef.current)
+    retryIntervalRef.current = setInterval(() => {
+      setRetrySeconds(seconds => Math.max(0, seconds - 1))
+    }, 1000)
+
+    clearTimeout(retryTimerRef.current)
+    retryTimerRef.current = setTimeout(() => {
+      clearInterval(retryIntervalRef.current)
+      setRetrySeconds(0)
+      submitVideo(payload, attempt)
+    }, delaySeconds * 1000)
+  }
+
+  const submitVideo = async (payload, attempt = 0) => {
+    setStatus("submitting")
+    try {
+      const response = await fetch("https://apihub.agnes-ai.com/v1/videos", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`
+        },
+        body: JSON.stringify(payload)
+      })
+
+      if (!response.ok) {
+        throw await readApiError(response)
+      }
+
+      const data = await response.json()
+      const returnedVideoId = data.video_id
+      if (!returnedVideoId) {
+        throw new Error("Agnes tidak mengembalikan video_id. Response: " + JSON.stringify(data).slice(0, 500))
+      }
+      setTaskId(data.task_id || data.id || returnedVideoId)
+      setVideoId(returnedVideoId)
+      setRetryAttempt(0)
+      setStatus("queued")
+    } catch (err) {
+      console.error(err)
+      if (err.code === "video_queue_full" && attempt < 3) {
+        scheduleQueueRetry(payload, attempt + 1)
+        return
+      }
+      setStatus("failed")
+      setErrorMsg(err.message || "Gagal terhubung ke server Agnes AI. Silakan periksa koneksi atau API Key Anda.")
+    }
+  }
+
+  const handleGenerate = async () => {
     if (!apiKey) {
       alert("⚠️ Masukkan API Key Agnes AI Anda terlebih dahulu di kolom header kanan atas!")
       return
@@ -351,6 +423,8 @@ const handleGenerate = async () => {
     setVideoUrl("")
     setTaskId("")
     setVideoId("")
+    setRetrySeconds(0)
+    setRetryAttempt(0)
 
     const tier = RESOLUTION_TIERS.find(t => t.id === resTier) || RESOLUTION_TIERS[0]
     const apiMode = mode === "txt2vid" ? "text" : mode === "img2vid" ? "reference" : "keyframe"
@@ -387,33 +461,7 @@ const handleGenerate = async () => {
       payload.last_frame = imgUrl2.trim()
     }
 
-    try {
-      const response = await fetch("https://apihub.agnes-ai.com/v1/videos", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${apiKey}`
-        },
-        body: JSON.stringify(payload)
-      })
-
-      if (!response.ok) {
-        throw new Error(await readApiError(response))
-      }
-
-      const data = await response.json()
-      const returnedVideoId = data.video_id
-      if (!returnedVideoId) {
-        throw new Error("Agnes tidak mengembalikan video_id. Response: " + JSON.stringify(data).slice(0, 500))
-      }
-      setTaskId(data.task_id || data.id || returnedVideoId)
-      setVideoId(returnedVideoId)
-      setStatus("queued")
-    } catch (err) {
-      console.error(err)
-      setStatus("failed")
-      setErrorMsg(err.message || "Gagal terhubung ke server Agnes AI. Silakan periksa koneksi atau API Key Anda.")
-    }
+    submitVideo(payload)
   }
 
   const handleDeleteHistory = (id) => {
@@ -866,19 +914,19 @@ const handleGenerate = async () => {
               {/* GENERATE SUBMIT ACTION BUTTON */}
               <button
                 onClick={handleGenerate}
-                disabled={status === "submitting" || status === "queued" || status === "generating"}
+                disabled={status === "submitting" || status === "queued" || status === "generating" || status === "retrying"}
                 style={{
                   width: "100%", padding: "1.1rem", border: 0, borderRadius: "0.75rem", cursor: "pointer", fontSize: "1rem", fontWeight: 800,
                   background: "linear-gradient(135deg, #f43f5e, #8b5cf6)", color: "#fff",
                   boxShadow: "0 4px 25px rgba(139, 92, 246, 0.25)", transition: "all 0.2s",
-                  opacity: (status === "submitting" || status === "queued" || status === "generating") ? 0.7 : 1,
+                  opacity: (status === "submitting" || status === "queued" || status === "generating" || status === "retrying") ? 0.7 : 1,
                   display: "flex", alignItems: "center", justifyContent: "center", gap: "0.6rem"
                 }}
               >
-                {(status === "submitting" || status === "queued" || status === "generating") ? (
+                {(status === "submitting" || status === "queued" || status === "generating" || status === "retrying") ? (
                   <>
                     <RefreshCw size={20} className="animate-spin" />
-                    <span>Sedang diproses... ({progress}%)</span>
+                    <span>{status === "retrying" ? `Retry otomatis dalam ${Math.floor(retrySeconds / 60)}:${String(retrySeconds % 60).padStart(2, "0")}` : `Sedang diproses... (${progress}%)`}</span>
                   </>
                 ) : (
                   <>
@@ -910,7 +958,7 @@ const handleGenerate = async () => {
                 )}
 
                 {/* ACTIVE QUEUE OR GENERATION RENDERING */}
-                {(status === "submitting" || status === "queued" || status === "generating") && (
+                {(status === "submitting" || status === "queued" || status === "generating" || status === "retrying") && (
                   <div style={{ textAlign: "center", padding: "2rem" }}>
                     
                     {/* Ring progress bar animation spinner */}
@@ -939,15 +987,16 @@ const handleGenerate = async () => {
                       {status === "submitting" && "📤 Mengirim Data ke Agnes Cloud..."}
                       {status === "queued" && "⏳ Menunggu Antrian GPU Cloud..."}
                       {status === "generating" && "🎬 Sedang Render Video Cinematic..."}
+                      {status === "retrying" && "🕒 Antrean Agnes Penuh"}
                     </h3>
                     
                     <p style={{ margin: "0 auto 1.5rem", fontSize: "0.85rem", color: "#a1a1aa", maxWidth: "340px", lineHeight: 1.5 }}>
-                      Video diproses di server asinkron Agnes menggunakan akselerasi AI Sapiens Labs. Proses ini biasanya memakan waktu beberapa menit.
+                      {status === "retrying" ? `Percobaan otomatis ${retryAttempt}/3. Menunggu ${Math.floor(retrySeconds / 60)} menit ${retrySeconds % 60} detik sebelum mengirim ulang.` : "Video diproses di server asinkron Agnes menggunakan akselerasi AI Sapiens Labs. Proses ini biasanya memakan waktu beberapa menit."}
                     </p>
 
                     <div style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", fontSize: "0.75rem", color: "#71717a", background: "#09090b", padding: "0.5rem 1rem", borderRadius: "0.375rem", border: "1px solid #232329" }}>
                       <span style={{ display: "inline-block", width: "6px", height: "6px", background: "#ec4899", borderRadius: "50%" }}></span>
-                      Task ID: {taskId || "Memulai..."}
+                      {status === "retrying" ? "Tidak ada task dibuat sampai antrean tersedia" : `Task ID: ${taskId || "Memulai..."}`}
                     </div>
 
                   </div>
